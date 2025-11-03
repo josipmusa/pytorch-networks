@@ -51,21 +51,24 @@ class NeuralNetwork(nn.Module):
             predicted_classes = torch.argmax(outputs, dim=1)
         return predicted_classes
 
-def _load_mnist_data():
-    transform = transforms.ToTensor()
-    mnist_train = datasets.MNIST(root='data', train=True, download=True, transform=transform)
-    mnist_test = datasets.MNIST(root='data', train=False, download=True, transform=transform)
+def _load_mnist_training_data():
+    mnist_train = datasets.MNIST(root='data', train=True, download=True, transform=transforms.ToTensor())
 
     X_train = mnist_train.data.float() / 255.0
     y_train = mnist_train.targets
+    X_train = X_train.view(X_train.size(0), -1)
+
+    return X_train, y_train
+
+def _load_mnist_testing_data():
+    mnist_test = datasets.MNIST(root='data', train=False, download=True, transform=transforms.ToTensor())
 
     X_test = mnist_test.data.float() / 255.0
     y_test = mnist_test.targets
-
-    X_train = X_train.view(X_train.size(0), -1)
     X_test = X_test.view(X_test.size(0), -1)
 
-    return X_train, y_train, X_test, y_test
+    return X_test, y_test
+
 
 def _visualize(model, predicted_classes, true_classes, X_test):
     save_dir = Path(__file__).parent
@@ -95,11 +98,23 @@ def _visualize(model, predicted_classes, true_classes, X_test):
     plt.close()
 
 def main():
-    torch.manual_seed(20)
-    X_train, y_train, X_test, y_test = _load_mnist_data()
-    model = NeuralNetwork()
-    model.fit(X_train, y_train)
+    script_dir = Path(__file__).resolve().parent
+    model_path = script_dir / "mnist_model.pth"
 
+    if model_path.exists():
+        model = NeuralNetwork()
+        model.load_state_dict(torch.load(model_path, map_location="cpu"))
+    else:
+        start_time = time.time()
+        torch.manual_seed(20)
+        X_train, y_train = _load_mnist_training_data()
+        model = NeuralNetwork()
+        model.fit(X_train, y_train)
+        torch.save(model.state_dict(), model_path)
+        end_time = time.time()
+        print(f"Model trained and saved in: {end_time - start_time:.6f} seconds")
+
+    X_test, y_test = _load_mnist_testing_data()
     predictions = model.predict(X_test)
     accuracy = (predictions == y_test).float().mean()
     print(f"Test Accuracy: {accuracy * 100:.2f}%")
@@ -107,7 +122,4 @@ def main():
     _visualize(model, predictions, y_test, X_test)
 
 if __name__ == "__main__":
-    start_time = time.time()
     main()
-    end_time = time.time()
-    print(f"Elapsed time: {end_time - start_time:.6f} seconds")
